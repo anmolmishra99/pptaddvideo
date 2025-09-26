@@ -1,5 +1,5 @@
 # First, install the required packages by running this command in your terminal:
-# pip install flask python-pptx requests pillow
+# pip install flask python-pptx requests pillow pptxtopdf
 
 from flask import Flask, request, send_file
 from pptx import Presentation
@@ -9,6 +9,7 @@ import tempfile
 import requests
 from PIL import Image
 import io
+# from pptxtopdf import convert
 
 app = Flask(__name__)
 
@@ -114,6 +115,7 @@ def upload_files():
 
         # Return the file
         return send_file(output_path, as_attachment=True, download_name='modified.pptx')
+
 
 if __name__ == '__main__':
     app.run(debug=True)
