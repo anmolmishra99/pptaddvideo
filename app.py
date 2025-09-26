@@ -12,6 +12,10 @@ import io
 
 app = Flask(__name__)
 
+@app.route('/')
+def index():
+    return "Hello, World! This is the PPT Video Injector API."
+
 @app.route('/upload', methods=['POST'])
 def upload_files():
     data = request.get_json()
