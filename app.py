@@ -1,5 +1,5 @@
 # First, install the required packages by running this command in your terminal:
-# pip install flask python-pptx requests pillow opencv-python
+# pip install flask python-pptx requests pillow pymediainfo
 
 from flask import Flask, request, send_file
 from pptx import Presentation
@@ -9,9 +9,30 @@ import tempfile
 import requests
 from PIL import Image
 import io
-import cv2  # OpenCV for getting actual video dimensions
+from pymediainfo import MediaInfo
 
 app = Flask(__name__)
+
+def get_video_dimensions(video_path):
+    """Get video dimensions using pymediainfo"""
+    try:
+        media_info = MediaInfo.parse(video_path)
+        
+        # Look for video tracks
+        for track in media_info.tracks:
+            if track.track_type == 'Video':
+                width = track.width
+                height = track.height
+                
+                if width and height:
+                    return int(width), int(height)
+        
+        print("No video track found in the file")
+        return None, None
+        
+    except Exception as e:
+        print(f"Error getting video dimensions with pymediainfo: {e}")
+        return None, None
 
 @app.route('/')
 def index():
@@ -68,36 +89,26 @@ def upload_files():
             with open(video_path, 'wb') as f:
                 f.write(video_response.content)
 
-            # Get actual video dimensions using OpenCV
-            try:
-                cap = cv2.VideoCapture(video_path)
-                video_width_px = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                video_height_px = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                cap.release()
-                
-                if video_width_px == 0 or video_height_px == 0:
-                    return f"Could not determine video dimensions for slide {slide_num}", 400
-                
-                print(f"Video dimensions: {video_width_px}x{video_height_px}")
-                
-                # Create thumbnail from first frame
-                cap = cv2.VideoCapture(video_path)
-                ret, frame = cap.read()
-                if ret:
-                    # Convert BGR to RGB
-                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    img = Image.fromarray(frame_rgb)
-                    # Resize thumbnail to reasonable size while maintaining aspect ratio
-                    img.thumbnail((320, 240), Image.Resampling.LANCZOS)
-                    img.save(thumbnail_path)
-                else:
-                    # Fallback: create a simple colored rectangle
-                    img = Image.new('RGB', (320, 180), color='blue')
-                    img.save(thumbnail_path)
-                cap.release()
-                
-            except Exception as e:
-                return f"Failed to process video for slide {slide_num}: {str(e)}", 400
+            # Get actual video dimensions using pymediainfo
+            video_width_px, video_height_px = get_video_dimensions(video_path)
+            
+            if video_width_px is None or video_height_px is None:
+                # Fallback to default dimensions if we can't get actual dimensions
+                print(f"Warning: Could not get video dimensions for slide {slide_num}, using defaults")
+                video_width_px = 1920
+                video_height_px = 1080
+            
+            print(f"Video dimensions: {video_width_px}x{video_height_px}")
+
+            # Create a simple thumbnail based on video aspect ratio
+            aspect_ratio = video_width_px / video_height_px
+            if aspect_ratio > 1:  # Landscape
+                thumb_width, thumb_height = 320, int(320 / aspect_ratio)
+            else:  # Portrait or square
+                thumb_width, thumb_height = int(240 * aspect_ratio), 240
+            
+            img = Image.new('RGB', (thumb_width, thumb_height), color='darkblue')
+            img.save(thumbnail_path)
 
             # Convert pixel dimensions to inches (assuming 96 DPI)
             video_width_in = video_width_px / 96.0
@@ -107,8 +118,7 @@ def upload_files():
             slide_width_in = prs.slide_width / 914400
             slide_height_in = prs.slide_height / 914400
 
-            # Position 3: Calculate position (you can modify this as needed)
-            # Position 3 could mean center, or specific coordinates - I'll place it at center
+            # Position 3: Bottom-right alignment (as in original code)
             left_in = slide_width_in - video_width_in
             top_in = slide_height_in - video_height_in
 
@@ -119,9 +129,10 @@ def upload_files():
                 video_width_in *= scale_factor
                 video_height_in *= scale_factor
                 
-                # Recalculate position after scaling
-                left_in = (slide_width_in - video_width_in) / 2
-                top_in = (slide_height_in - video_height_in) / 2
+                # Recalculate position after scaling (keep bottom-right alignment)
+                left_in = slide_width_in - video_width_in
+                top_in = slide_height_in - video_height_in
+                print(f"Video scaled down by factor: {scale_factor:.2f}")
 
             # Ensure position is not negative
             left_in = max(0, left_in)
