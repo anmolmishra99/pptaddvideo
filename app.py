@@ -10,8 +10,11 @@ import requests
 from PIL import Image
 import io
 from pymediainfo import MediaInfo
+from flask_cors import CORS
 
 app = Flask(__name__)
+
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 def get_video_dimensions(video_path):
     """Get video dimensions using pymediainfo"""
